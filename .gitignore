@@ -1,0 +1,52 @@
+# Maven build directories
+target/
+
+# Gradle build directories
+.gradle/
+build/
+
+# IntelliJ IDEA files
+.idea/
+*.iml
+
+# Eclipse project files
+.project
+.classpath
+.settings/
+
+# VSCode settings
+.vscode/
+
+# Application config files
+application.properties
+application.yml
+
+# Node.js dependencies (if you have a frontend)
+node_modules/
+
+# Logs and local environment files
+*.log
+*.swp
+*.bak
+.env
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# JAR/WAR files (if built locally)
+*.jar
+*.war
+
+# Generated test output
+test-output/
+*.xml
+
+# Temporary files from text editors
+*.swp
+*.bak
+
+# Additional folders to exclude
+.svn/
+.hg/
+.git/
