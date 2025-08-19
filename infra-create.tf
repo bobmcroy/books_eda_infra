@@ -1,3 +1,14 @@
+# Step 1.0: Create an S3 bucket to store TF state as a backup
+terraform {
+  required_version = ">= 1.5.0"
+
+  backend "s3" {
+    bucket = "book-app-terraform-state"
+    key    = "global/s3/terraform.tfstate"
+    region = "us-east-1"
+  }
+}
+
 # Step 1.1: Create EC2 Instance for the Landing Page
 # Create EC2 instance to host the landing page in a security group that allows HTTP access.
 
@@ -5,22 +16,23 @@ provider "aws" {
   region = "us-east-1"
 }
 
-resource "aws_instance" "web_app" {
-  ami           = "ami-0e1989e836322f58b"  # Replace with the AMI ID for your region
+resource "aws_instance" "bookAppFrontEnd_WebEC2" {
+  ami           = "ami-0e1989e836322f58b" # Replace with the AMI ID for your region
   instance_type = "t3.micro"
   key_name      = "rjm-devops-kp"
 
   security_groups = [aws_security_group.book_web_sg.name]
 
   tags = {
-    Name = "BookAppLandingPage"
+    Name           = "BookAppFrontEnd"
+    ResourceType   = "EC2"
+    ResourceDomain = "Web"
   }
 }
-
 resource "aws_security_group" "book_web_sg" {
   name        = "book_web_sg_2025"
   description = "Allow HTTP traffic"
-  
+
   ingress {
     from_port   = 80
     to_port     = 80
@@ -41,29 +53,27 @@ resource "aws_security_group" "book_web_sg" {
 
 resource "aws_dynamodb_table" "book_list" {
   name         = "book_list"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "book_id"
+  billing_mode = "PAY_PER_REQUEST" # On-demand, no fixed read/write capacity
+  hash_key     = "bookId"
 
+  # Attributes used in items
   attribute {
-    name = "book_id"
+    name = "bookId"
     type = "S"
   }
 
   attribute {
-    name = "book_title"
+    name = "title"
     type = "S"
   }
 
-  # Define the Global Secondary Index for book_title
+  # Optional: GSI for quick title search
   global_secondary_index {
-    name               = "book-title-index"
-    hash_key           = "book_title"  # The attribute to index
-    projection_type    = "ALL"  # You can choose to project only specific attributes if needed
-    read_capacity      = 5
-    write_capacity     = 5
+    name            = "title-index"
+    hash_key        = "title"
+    projection_type = "ALL"
+    # read/write capacity ignored in PAY_PER_REQUEST
   }
-
-  # Add more attributes as required
 }
 
 resource "aws_dynamodb_table" "book_transactions" {
@@ -157,4 +167,104 @@ resource "aws_sns_topic_subscription" "sell_sub" {
   topic_arn = aws_sns_topic.book_sell.arn
   protocol  = "sqs"
   endpoint  = aws_sqs_queue.book_sell_queue.arn
+}
+
+resource "aws_sqs_queue_policy" "book_list_queue_policy" {
+  queue_url = aws_sqs_queue.book_list_queue.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "Allow-SNS-SendMessage"
+        Effect    = "Allow"
+        Principal = { AWS = "*" }
+        Action    = "sqs:SendMessage"
+        Resource  = aws_sqs_queue.book_list_queue.arn
+        Condition = {
+          ArnEquals = { "aws:SourceArn" = aws_sns_topic.book_list.arn }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_sqs_queue_policy" "book_checkout_queue_policy" {
+  queue_url = aws_sqs_queue.book_checkout_queue.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "Allow-SNS-SendMessage"
+        Effect    = "Allow"
+        Principal = { AWS = "*" }
+        Action    = "sqs:SendMessage"
+        Resource  = aws_sqs_queue.book_checkout_queue.arn
+        Condition = {
+          ArnEquals = { "aws:SourceArn" = aws_sns_topic.book_checkout.arn }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_sqs_queue_policy" "book_buy_queue_policy" {
+  queue_url = aws_sqs_queue.book_buy_queue.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "Allow-SNS-SendMessage"
+        Effect    = "Allow"
+        Principal = { AWS = "*" }
+        Action    = "sqs:SendMessage"
+        Resource  = aws_sqs_queue.book_buy_queue.arn
+        Condition = {
+          ArnEquals = { "aws:SourceArn" = aws_sns_topic.book_buy.arn }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_sqs_queue_policy" "book_return_queue_policy" {
+  queue_url = aws_sqs_queue.book_return_queue.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "Allow-SNS-SendMessage"
+        Effect    = "Allow"
+        Principal = { AWS = "*" }
+        Action    = "sqs:SendMessage"
+        Resource  = aws_sqs_queue.book_return_queue.arn
+        Condition = {
+          ArnEquals = { "aws:SourceArn" = aws_sns_topic.book_return.arn }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_sqs_queue_policy" "book_sell_queue_policy" {
+  queue_url = aws_sqs_queue.book_sell_queue.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "Allow-SNS-SendMessage"
+        Effect    = "Allow"
+        Principal = { AWS = "*" }
+        Action    = "sqs:SendMessage"
+        Resource  = aws_sqs_queue.book_sell_queue.arn
+        Condition = {
+          ArnEquals = { "aws:SourceArn" = aws_sns_topic.book_sell.arn }
+        }
+      }
+    ]
+  })
 }
